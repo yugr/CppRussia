@@ -1,0 +1,343 @@
+Одним из малоизвестных примеров Undefined Behavior в C/C++ является нарушение требований к функциям сравнения (компараторам).
+Компараторы широко используются в алгоритмах (std::sort, std::binary_search, etc.) и контейнерах (std::set, std::map) и
+встречаются как в C++, так и в C (qsort, bsearch). Компараторы должны удовлетворять некоторым аксиомам,
+которые в математике описываются понятием строгого слабого порядка (strict weak ordering).
+Эти аксиомы неинтуитивны и в них легко ошибиться, о чём свидетельствует большое количество соответствующих багов
+в open-source проектах. Современные тулчейны предоставляют средства для отслеживания таких ошибок и
+о них будет рассказано в докладе.
+
+== Введение ==
+
+Рассмотрим простую программу:
+
+```
+$ cat repro.cc
+#include <algorithm>
+#include <vector>
+#include <iostream>
+
+#include <stdlib.h>
+
+int main() {
+  std::vector<int> vals;
+  srand(0);
+  for (size_t i = 0; i < N; ++i)
+    vals.push_back((double)rand() / RAND_MAX * 10);
+  std::sort(vals.begin(), vals.end(),
+            [](int l, int r) { return l <= r; });
+  for (auto v : vals) std::cout << v << "\n";
+  return 0;
+}
+```
+
+Кто сможет заметить в ней ошибку? (кроме того что плохо использовать `rand` ;) )
+
+Давайте посмотрим работает ли она:
+```
+$ g++ -g -DN=10 tmp.cc && ./a.out
+1
+2
+3
+3
+5
+7
+7
+7
+8
+9
+```
+
+Вроде всё нормально. Но что если попробовать увеличить размер:
+```
+$ g++ -g -DN=50 tmp.cc && ./a.out
+1
+4
+1
+1
+9
+2
+5
+8
+0
+0
+273
+0
+0
+0
+1
+1
+1
+1
+1
+1
+2
+2
+2
+2
+2
+2
+3
+3
+3
+3
+4
+4
+4
+4
+5
+5
+5
+5
+5
+6
+6
+6
+6
+6
+7
+7
+7
+7
+7
+7
+double free or corruption (out)
+Aborted
+```
+
+Как мы видим массив не отсортировался, да ещё и произошёл buffer overflow!
+В чём же дело?
+
+```
+g++ -g -DN=50 -fsanitize=address -D_GLIBCXX_SANITIZE_VECTOR=1 tmp.cc
+./a.out
+=================================================================
+==143607==ERROR: AddressSanitizer: container-overflow on address 0x611000000108 at pc 0x55fa93254d5d bp 0x7fff1ed30c80 sp 0x7fff1ed30c78
+READ of size 4 at 0x611000000108 thread T0
+    #0 0x55fa93254d5c in operator()<__gnu_cxx::__normal_iterator<int*, std::vector<int> >, __gnu_cxx::__normal_iterator<int*, std::vector<int> > > /usr/include/c++/10/bits/predefined_ops.h:156
+    #1 0x55fa93255164 in __unguarded_partition<__gnu_cxx::__normal_iterator<int*, std::vector<int> >, __gnu_cxx::__ops::_Iter_comp_iter<main()::<lambda(int, int)> > > /usr/include/c++/10/bits/stl_algo.h:1904
+    #2 0x55fa9325428b in __unguarded_partition_pivot<__gnu_cxx::__normal_iterator<int*, std::vector<int> >, __gnu_cxx::__ops::_Iter_comp_iter<main()::<lambda(int, int)> > > /usr/include/c++/10/bits/stl_algo.h:1926
+    #3 0x55fa93253d1f in __introsort_loop<__gnu_cxx::__normal_iterator<int*, std::vector<int> >, long int, __gnu_cxx::__ops::_Iter_comp_iter<main()::<lambda(int, int)> > > /usr/include/c++/10/bits/stl_algo.h:1958
+    #4 0x55fa93253d3d in __introsort_loop<__gnu_cxx::__normal_iterator<int*, std::vector<int> >, long int, __gnu_cxx::__ops::_Iter_comp_iter<main()::<lambda(int, int)> > > /usr/include/c++/10/bits/stl_algo.h:1959
+    #5 0x55fa93253d3d in __introsort_loop<__gnu_cxx::__normal_iterator<int*, std::vector<int> >, long int, __gnu_cxx::__ops::_Iter_comp_iter<main()::<lambda(int, int)> > > /usr/include/c++/10/bits/stl_algo.h:1959
+    #6 0x55fa93253a6f in __sort<__gnu_cxx::__normal_iterator<int*, std::vector<int> >, __gnu_cxx::__ops::_Iter_comp_iter<main()::<lambda(int, int)> > > /usr/include/c++/10/bits/stl_algo.h:1974
+    #7 0x55fa932537fb in sort<__gnu_cxx::__normal_iterator<int*, std::vector<int> >, main()::<lambda(int, int)> > /usr/include/c++/10/bits/stl_algo.h:4894
+    #8 0x55fa932534ca in main /home/yugr/tasks/CppRussia/tmp.cc:11
+    #9 0x7f9bba05ad09 in __libc_start_main ../csu/libc-start.c:308
+    #10 0x55fa93253249 in _start (/home/yugr/tasks/CppRussia/a.out+0x2249)
+
+0x611000000108 is located 200 bytes inside of 256-byte region [0x611000000040,0x611000000140)
+allocated by thread T0 here:
+    #0 0x7f9bba49e647 in operator new(unsigned long) ../../../../src/libsanitizer/asan/asan_new_delete.cpp:99
+    #1 0x55fa93258f68 in __gnu_cxx::new_allocator<int>::allocate(unsigned long, void const*) /usr/include/c++/10/ext/new_allocator.h:115
+    #2 0x55fa932587c9 in std::allocator_traits<std::allocator<int> >::allocate(std::allocator<int>&, unsigned long) /usr/include/c++/10/bits/alloc_traits.h:460
+    #3 0x55fa9325834f in std::_Vector_base<int, std::allocator<int> >::_M_allocate(unsigned long) /usr/include/c++/10/bits/stl_vector.h:346
+    #4 0x55fa93257a07 in void std::vector<int, std::allocator<int> >::_M_realloc_insert<int>(__gnu_cxx::__normal_iterator<int*, std::vector<int, std::allocator<int> > >, int&&) /usr/include/c++/10/bits/vector.tcc:440
+    #5 0x55fa9325745e in void std::vector<int, std::allocator<int> >::emplace_back<int>(int&&) /usr/include/c++/10/bits/vector.tcc:121
+    #6 0x55fa93256dbd in std::vector<int, std::allocator<int> >::push_back(int&&) /usr/include/c++/10/bits/stl_vector.h:1204
+    #7 0x55fa93253483 in main /home/yugr/tasks/CppRussia/tmp.cc:10
+    #8 0x7f9bba05ad09 in __libc_start_main ../csu/libc-start.c:308
+
+HINT: if you don't care about these errors you may set ASAN_OPTIONS=detect_container_overflow=0.
+If you suspect a false positive see also: https://github.com/google/sanitizers/wiki/AddressSanitizerContainerOverflow.
+SUMMARY: AddressSanitizer: container-overflow /usr/include/c++/10/bits/predefined_ops.h:156 in operator()<__gnu_cxx::__normal_iterator<int*, std::vector<int> >, __gnu_cxx::__normal_iterator<int*, std::vector<int> > >
+Shadow bytes around the buggy address:
+  0x0c227fff7fd0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x0c227fff7fe0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x0c227fff7ff0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x0c227fff8000: fa fa fa fa fa fa fa fa 00 00 00 00 00 00 00 00
+  0x0c227fff8010: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+=>0x0c227fff8020: 00[fc]fc fc fc fc fc fc fa fa fa fa fa fa fa fa
+  0x0c227fff8030: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x0c227fff8040: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x0c227fff8050: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x0c227fff8060: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x0c227fff8070: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+Shadow byte legend (one shadow byte represents 8 application bytes):
+  Addressable:           00
+  Partially addressable: 01 02 03 04 05 06 07
+  Heap left redzone:       fa
+  Freed heap region:       fd
+  Stack left redzone:      f1
+  Stack mid redzone:       f2
+  Stack right redzone:     f3
+  Stack after return:      f5
+  Stack use after scope:   f8
+  Global redzone:          f9
+  Global init order:       f6
+  Poisoned by user:        f7
+  Container overflow:      fc
+  Array cookie:            ac
+  Intra object redzone:    bb
+  ASan internal:           fe
+  Left alloca redzone:     ca
+  Right alloca redzone:    cb
+  Shadow gap:              cc
+==143607==ABORTING
+```
+
+Итак мы видим что неправильные компараторы могут приводить к серьезным проблемам.
+
+Результаты получены на системе:
+
+```
+$ uname -a
+Linux gcc13 5.10.0-20-amd64 #1 SMP Debian 5.10.158-2 (2022-12-13) x86_64 GNU/Linux
+```
+
+== Причина ошибки ==
+
+TODO
+
+== Аксиомы компараторов ==
+
+Аксиомы, которым должны подчиняться компараторы, изложены в стандарте языка,
+но проще воспользовать Cppref: https://en.cppreference.com/w/cpp/named_req/Compare
+
+В-общем компаратор должен вести себя "как operator <"
+
+1) comp(a, a) == false
+2) comp(a, b) == true -> comp(b, a) == false
+3) comp(a, b) == true && comp(b, c) == true -> comp(a, c) == true
+
+Как мы видели алгоритмы полагаются на эти аксиомы.
+
+== Понятие о strict weak ordering ==
+
+1) Всем знакомый строгий частичный порядок
+2) Зачем нужен "weak"
+3) Факультатив: всякий частичный порядок порождает
+  - отношение эквивалентности ("равенства")
+  - строгий порядок (не слабый) на классах эквивалентности
+
+TODO: аксиомы эквивалентности
+
+== Примеры ошибок со stackoverflow и OSS проектов ==
+
+1) использование `<=` вместо `<`
+
+Уже видели вначале
+
+https://stackoverflow.com/questions/40483971/program-crash-in-stdsort-sometimes-cant-reproduce
+https://stackoverflow.com/questions/65468629/stl-sort-debug-assertion-failed
+
+2) сравнение особых объектов отдельным алгоритмом
+
+```
+[](Object l, Object r) {
+  if (is_special(l) && is_special(r))
+    return comp_special(l, r);
+  else
+    return comp_normal(l, r);
+}
+```
+
+Очень легко нарушить условие транзитивности.
+
+Например если
+```
+comp_special(special_obj1, special_obj2) && comp_normal(special_obj2, normal_obj)
+```
+то должно быть
+```
+comp_normal(special_obj1, normal_obj)
+```
+но это часто не выполняется т.к `comp_special` и `comp_normal` как правило
+логически (и алгоритмически) никак не связаны между собой.
+
+3) неправильная реализация лексикографического порядка
+
+Не сравнивается первый элемент структуры на равенство при сравнение второго:
+
+```
+[](SomeClass l, SomeClass r) {
+  if (l.first < r.first)
+    return true;
+  else if (l.second < r.second) // FORGOT "&& l.fist == r.first"
+    return true;
+  else
+    return false;
+}
+```
+
+Правильное решение - использовать `std::tie` и встроенный оператор сравнения кортежей.
+
+4) массивы содержащие NaN
+
+https://stackoverflow.com/questions/9244243/strict-weak-ordering-and-stdsort
+
+5) Always return true/false for special value
+
+https://stackoverflow.com/questions/55815423/stdsort-crashes-with-strict-weak-ordering-comparing-with-garbage-values
+
+6) Failure to respect irreflexivity
+
+https://stackoverflow.com/questions/64014782/c-program-crashes-when-trying-to-sort-a-vector-of-strings
+
+7) Inconsistent result for special value
+
+https://stackoverflow.com/questions/51437032/sorting-vector-of-smart-pointers-mysterious-crash
+
+8) Отрицание строгого порядка
+
+https://schneide.blog/2010/11/01/bug-hunting-fun-with-stdsort/
+
+== Отладочные средства в тулчейнах ==
+
+В libstdc++ с помощью макроса `-D_GLIBCXX_DEBUG` можно включить ряд дополнительных проверок,
+например
+```
+__glibcxx_requires_irreflexive(__first, __last)
+_GLIBCXX_DEBUG_VERIFY(__gnu_debug::__check_sorted(...
+```
+
+Опция имеет существенный (2x) оверхед, поэтому рекомендуется использовать только для тестирования.
+
+Libc++ [comparator consistency checks](https://libcxx.llvm.org/DesignDocs/DebugMode.html):
+```
+Libc++ provides some checks for the consistency of comparators passed to algorithms. Specifically, many algorithms such as binary_search, merge, next_permutation, and sort, wrap the user-provided comparator to assert that !comp(y, x) whenever comp(x, y). This can cause the user-provided comparator to be evaluated up to twice as many times as it would be without the debug mode, and causes the library to violate some of the Standard’s complexity clauses.
+```
+
+Включается с помощью `-D_LIBCPP_ENABLE_DEBUG_MODE`.
+
+Эти чекеры не меняют алгоритмическую сложность алгоритма (`O(N*logN)`),
+поэтому не могут провести полную проверку корректности
+(и в частности проверку условия транзитивности).
+
+== SortChecker ==
+
+Два простых динамических чекера для проверки корректности в рантайме:
+
+  * SortChecker:
+    - https://github.com/yugr/sortcheck
+    - работает с программами на C
+    - перехватывает и проверяет API типа `qsort` и `bsearch`
+    - основан на динамической инструментации (`LD_PRELOAD`)
+  * SortChecker++
+    - https://github.com/yugr/sortcheckxx
+    - работает с программами на C++
+    - проверяет API типа `std::sort`
+    - основан на source-to-source инструментации (Clang-based)
+
+Пример использования: TODO
+
+== Квадратичный алгоритм проверки Д. Кутенина ==
+
+https://github.com/danlark1/quadratic_strict_weak_ordering
+
+TODO
+
+== Что почитать ==
+
+D. Kutenin [Changing std::sort at Google’s Scale and Beyond](https://danlark.org/2022/04/20/changing-stdsort-at-googles-scale-and-beyond/)
+
+== Домашнее задание ==
+
+1) Изучите типичные ошибки и не повторяйте их в работе
+2) Включите `GLIBCXX_DEBUG` и `_LIBCPP_ENABLE_DEBUG_MODE` в своём CI
+3) Натравите `Sortchecker` (и `Sortchecker++`) на свой код
+    * сообщения об ошибках и дополнения приветствуются!
+
+== Другие типы ошибок в компараторных API ==
+
+0) Неотсортированные массивы в API типа `bsearch` (поддерживается в SortChecker)
+1) Неопределённый порядок сортировки эквивалентных элементов (поддерживается в libc++ с помощью рандомизации `-D_LIBCPP_DEBUG_RANDOMIZE_UNSPECIFIED_STABILITY_SEED')
