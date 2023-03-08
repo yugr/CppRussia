@@ -244,6 +244,8 @@ comp_normal(special_obj1, normal_obj)
 но это часто не выполняется т.к `comp_special` и `comp_normal` как правило
 логически (и алгоритмически) никак не связаны между собой.
 
+Пример из жизни: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=68988
+
 3) неправильная реализация лексикографического порядка
 
 Не сравнивается первый элемент структуры на равенство при сравнение второго:
@@ -265,32 +267,42 @@ comp_normal(special_obj1, normal_obj)
 
 https://stackoverflow.com/questions/9244243/strict-weak-ordering-and-stdsort
 
-5) Always return true/false for special value
+5) некорректная обработка специального случая
+
+```
+[](std::uniq_ptr<SomeClass> l, std::uniq_ptr<SomeClass> r) {
+  if (!l.get())
+    return true;
+  else
+    ...
+}
+
+В данном случае нарушаются требования иррефлексивности и антисимметричности.
 
 https://stackoverflow.com/questions/55815423/stdsort-crashes-with-strict-weak-ordering-comparing-with-garbage-values
 
-6) Failure to respect irreflexivity
+6) Отрицание строгого порядка не является строгим порядком
 
-https://stackoverflow.com/questions/64014782/c-program-crashes-when-trying-to-sort-a-vector-of-strings
+```
+auto less = [](Object l, Object r) { return l < r; };
+auto inv_less = std::not2(less);
+```
 
-7) Inconsistent result for special value
+В данном случае программист рассчитывал на то что отрицание корректного компаратора
+также является компаратором.
 
-https://stackoverflow.com/questions/51437032/sorting-vector-of-smart-pointers-mysterious-crash
-
-8) Отрицание строгого порядка
+Это не так: отрицанием строгого порядка является нестрогий порядок,
+который как мы видели в начале презентации приводит к ошибкам.
 
 https://schneide.blog/2010/11/01/bug-hunting-fun-with-stdsort/
 
 == Отладочные средства в тулчейнах ==
 
-В libstdc++ с помощью макроса `-D_GLIBCXX_DEBUG` можно включить ряд дополнительных проверок,
-например
+В libstdc++ с помощью макроса `-D_GLIBCXX_DEBUG` можно включить дополнительную проверку
+иррефлексивности:
 ```
 __glibcxx_requires_irreflexive(__first, __last)
-_GLIBCXX_DEBUG_VERIFY(__gnu_debug::__check_sorted(...
 ```
-
-Опция имеет существенный (2x) оверхед, поэтому рекомендуется использовать только для тестирования.
 
 Libc++ [comparator consistency checks](https://libcxx.llvm.org/DesignDocs/DebugMode.html):
 ```
@@ -298,6 +310,8 @@ Libc++ provides some checks for the consistency of comparators passed to algorit
 ```
 
 Включается с помощью `-D_LIBCPP_ENABLE_DEBUG_MODE`.
+
+Обе опции имеют существенный (2x) оверхед, поэтому их рекомендуется использовать только для тестирования.
 
 Эти чекеры не меняют алгоритмическую сложность алгоритма (`O(N*logN)`),
 поэтому не могут провести полную проверку корректности
@@ -318,7 +332,11 @@ Libc++ provides some checks for the consistency of comparators passed to algorit
     - проверяет API типа `std::sort`
     - основан на source-to-source инструментации (Clang-based)
 
-Пример использования: TODO
+TODO:
+  - пример использования
+  - псевдокод
+  - ограничения
+  - результаты
 
 == Квадратичный алгоритм проверки Д. Кутенина ==
 
