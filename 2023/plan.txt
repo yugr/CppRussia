@@ -11,7 +11,6 @@
 Рассмотрим простую программу:
 
 ```
-$ cat repro.cc
 #include <algorithm>
 #include <vector>
 #include <iostream>
@@ -30,11 +29,11 @@ int main() {
 }
 ```
 
-Кто сможет заметить в ней ошибку? (кроме того что плохо использовать `rand` ;) )
+Кто сможет заметить в ней ошибку? (кроме того что плохо использовать `rand()` ;) )
 
 Давайте посмотрим работает ли она:
 ```
-$ g++ -g -DN=10 tmp.cc && ./a.out
+$ g++ -g -DN=10 bad.cc && ./a.out
 1
 2
 3
@@ -49,7 +48,7 @@ $ g++ -g -DN=10 tmp.cc && ./a.out
 
 Вроде всё нормально. Но что если попробовать увеличить размер:
 ```
-$ g++ -g -DN=50 tmp.cc && ./a.out
+$ g++ -g -DN=50 bad.cc && ./a.out
 1
 4
 1
@@ -108,7 +107,7 @@ Aborted
 В чём же дело?
 
 ```
-g++ -g -DN=50 -fsanitize=address -D_GLIBCXX_SANITIZE_VECTOR=1 tmp.cc
+g++ -g -DN=50 -fsanitize=address -D_GLIBCXX_SANITIZE_VECTOR=1 bad.cc
 ./a.out
 =================================================================
 ==143607==ERROR: AddressSanitizer: container-overflow on address 0x611000000108 at pc 0x55fa93254d5d bp 0x7fff1ed30c80 sp 0x7fff1ed30c78
@@ -121,7 +120,7 @@ READ of size 4 at 0x611000000108 thread T0
     #5 0x55fa93253d3d in __introsort_loop<__gnu_cxx::__normal_iterator<int*, std::vector<int> >, long int, __gnu_cxx::__ops::_Iter_comp_iter<main()::<lambda(int, int)> > > /usr/include/c++/10/bits/stl_algo.h:1959
     #6 0x55fa93253a6f in __sort<__gnu_cxx::__normal_iterator<int*, std::vector<int> >, __gnu_cxx::__ops::_Iter_comp_iter<main()::<lambda(int, int)> > > /usr/include/c++/10/bits/stl_algo.h:1974
     #7 0x55fa932537fb in sort<__gnu_cxx::__normal_iterator<int*, std::vector<int> >, main()::<lambda(int, int)> > /usr/include/c++/10/bits/stl_algo.h:4894
-    #8 0x55fa932534ca in main /home/yugr/tasks/CppRussia/tmp.cc:11
+    #8 0x55fa932534ca in main /home/yugr/tasks/CppRussia/bad.cc:11
     #9 0x7f9bba05ad09 in __libc_start_main ../csu/libc-start.c:308
     #10 0x55fa93253249 in _start (/home/yugr/tasks/CppRussia/a.out+0x2249)
 
@@ -134,7 +133,7 @@ allocated by thread T0 here:
     #4 0x55fa93257a07 in void std::vector<int, std::allocator<int> >::_M_realloc_insert<int>(__gnu_cxx::__normal_iterator<int*, std::vector<int, std::allocator<int> > >, int&&) /usr/include/c++/10/bits/vector.tcc:440
     #5 0x55fa9325745e in void std::vector<int, std::allocator<int> >::emplace_back<int>(int&&) /usr/include/c++/10/bits/vector.tcc:121
     #6 0x55fa93256dbd in std::vector<int, std::allocator<int> >::push_back(int&&) /usr/include/c++/10/bits/stl_vector.h:1204
-    #7 0x55fa93253483 in main /home/yugr/tasks/CppRussia/tmp.cc:10
+    #7 0x55fa93253483 in main /home/yugr/tasks/CppRussia/bad.cc:10
     #8 0x7f9bba05ad09 in __libc_start_main ../csu/libc-start.c:308
 
 HINT: if you don't care about these errors you may set ASAN_OPTIONS=detect_container_overflow=0.
@@ -186,7 +185,67 @@ Linux gcc13 5.10.0-20-amd64 #1 SMP Debian 5.10.158-2 (2022-12-13) x86_64 GNU/Lin
 
 == Причина ошибки ==
 
+Данный код выполняет основной шаг быстрой сортировки -
+разбиение массива по опорному элементу `__pivot`.
+Суффикс unguarded наводит на подозрения.
+
+```
+_RandomAccessIterator
+__unguarded_partition(_RandomAccessIterator __first,
+                      _RandomAccessIterator __last,
+                      _RandomAccessIterator __pivot, _Compare __comp)
+{
+  while (true)
+    {
+      while (__comp(__first, __pivot))
+        ++__first;
+      --__last;
+      while (__comp(__pivot, __last))
+        --__last;
+      if (!(__first < __last))
+        return __first;
+      std::iter_swap(__first, __last);
+      ++__first;
+    }
+}
+```
+
+Переполнение буфера происходит в первом while-цикле.
+Как мы видим здесь используется неявное предположение о том,
+что найдётся элемент, не меньший `__pivot`.
+
+Оно обусловлено алгоритмом выбора `__pivot`: он выбирается
+как медиана трёх элементов массива (первого, среднего и последнего):
+```
+std::__move_median_to_first(__pivot, __first + 1, __mid, __last - 1,
+                            __comp);
+```
+
+Т.о. образом при входе в цикл всегда существуют элементы массива, т.ч.
+```
+__comp(__pivot, __a) == false && __comp(__b, __pivot) == false
+```
+и на каждой итерации этот инвариант сохраняется.
+Это и гарантирует что не произойдёт переполнения буфера.
+
 TODO
+
+Посмотрим ещё раз на цикл:
+```
+while (__comp(__first, __pivot))
+  ++__first;
+```
+
+Рассмотрим массив из одинаковых элементов.
+В случае корректного компаратора
+```
+[](int l, int r) { return l < r; });
+```
+мы остановимся на первом же элементе, но в случае
+```
+[](int l, int r) { return l <= r; });
+```
+мы проитерируемся за границу массива.
 
 == Аксиомы компараторов ==
 
@@ -199,17 +258,30 @@ TODO
 2) comp(a, b) == true -> comp(b, a) == false
 3) comp(a, b) == true && comp(b, c) == true -> comp(a, c) == true
 
-Как мы видели алгоритмы полагаются на эти аксиомы.
+а связанное с компаратором отношение несравнимости
+```
+bool equiv(T a, T b) { return comp(a, b) == false && comp(b, a) == false; }
+```
+"как operator ==":
+1) equiv(a, a) == true
+2) equiv(a, b) == true -> equiv(b, a) == true
+3) equiv(a, b) == true && equiv(b, c) == true -> equiv(a,c) == true
+
+(первые два правила автоматически удовлетворяются при выполнение аксиом компаратора)
+
+Как мы видели, алгоритмы сортировки полагаются на эти аксиомы.
 
 == Понятие о strict weak ordering ==
 
-1) Всем знакомый строгий частичный порядок
+1) Всем знакомый строгий порядок
 2) Зачем нужен "weak"
-3) Факультатив: всякий частичный порядок порождает
-  - отношение эквивалентности ("равенства")
-  - строгий порядок (не слабый) на классах эквивалентности
 
-TODO: аксиомы эквивалентности
+Всякий частичный порядок порождает отношение эквивалентности ("равенства"),
+которое вообще говоря отличается от обычного `operator ==` класса.
+
+TODO: аксиомы отношения эквивалентности.
+
+Порядок на классах эквивалентности слабого порядка становится сильным.
 
 == Примеры ошибок со stackoverflow и OSS проектов ==
 
@@ -265,6 +337,48 @@ comp_normal(special_obj1, normal_obj)
 
 4) массивы содержащие NaN
 
+Типы с плавающей точкой поддерживают специальные значения NaN,
+которые возникают в результате некорректных вычислений
+(например извлечения корня из отрицательного числа или деления `0/0`).
+
+Сравнение с NaN всегда возвращает false, поэтому NaN рассматривается
+как эквивалентный остальным числам.
+
+Это приводит к нарушению транзитивности отношения эквивалентности:
+1.0 ~ NAN и NAN ~ 2.0, но !(1.0 ~ 2.0).
+
+На практике это приводит к неправильной сортировке массивов содержащих NaNs:
+
+```
+#include <algorithm>
+#include <iostream>
+#include <math.h>
+
+int main() {
+  double a[] = {
+    100,
+    5,
+    3,
+    NAN,
+    200,
+    11
+  };
+  std::sort(&a[0], &a[sizeof(a)/sizeof(a[0])]);
+  for (auto x : a) std::cout << x << "\n";
+  return 0;
+}
+```
+
+```
+$ g++ bad.cc && ./a.out
+3
+5
+100
+nan
+11
+200
+```
+
 https://stackoverflow.com/questions/9244243/strict-weak-ordering-and-stdsort
 
 5) некорректная обработка специального случая
@@ -296,12 +410,36 @@ auto inv_less = std::not2(less);
 
 https://schneide.blog/2010/11/01/bug-hunting-fun-with-stdsort/
 
+== Компараторы в стандартной библиотеке ==
+
+Алгоритмы:
+  * std::sort, std::stable_sort
+  * std::nth_element
+  * std::binary_search
+  * std::equal_range, std::lower_bound, std::upper_bound
+  * std::min_element, std::max_element
+
+Контейнеры:
+  * std::map, std::multimap
+  * std::set, std::multiset
+
 == Отладочные средства в тулчейнах ==
 
 В libstdc++ с помощью макроса `-D_GLIBCXX_DEBUG` можно включить дополнительную проверку
 иррефлексивности:
 ```
-__glibcxx_requires_irreflexive(__first, __last)
+$ cat /usr/include/c++/10/bits/stl_algo.h
+...
+inline void
+sort(_RandomAccessIterator __first, _RandomAccessIterator __last,
+     _Compare __comp)
+{
+  ...
+  __glibcxx_requires_irreflexive_pred(__first, __last, __comp);
+
+  std::__sort(__first, __last, __gnu_cxx::__ops::__iter_comp_iter(__comp));
+}
+...
 ```
 
 Libc++ [comparator consistency checks](https://libcxx.llvm.org/DesignDocs/DebugMode.html):
@@ -335,7 +473,8 @@ Libc++ provides some checks for the consistency of comparators passed to algorit
 TODO:
   - пример использования
   - псевдокод
-  - ограничения
+  - ограничения (нет поддержки `<=>`, не поддержаны все алгоритмы например `nth_element`)
+  - сложность и как с ней бороться
   - результаты
 
 == Квадратичный алгоритм проверки Д. Кутенина ==
