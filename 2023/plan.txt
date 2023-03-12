@@ -8,19 +8,19 @@
 
 == Введение ==
 
-Компаратор - функция сравнения элементов класса,
+Компаратор - функция сравнения элементов типа,
 которая используется различными алгоритмами и контейнерами
-стандартной библиотеки для упорядочения элементов
+стандартной библиотеки для упорядочения элементов.
 
 Компаратор может быть указан явно или по умолчанию реализовываться
 с помощью операторов `<` или (с C++20) `<=>`.
 
 Алгоритмы:
   * std::sort, std::stable_sort
-  * std::nth_element
   * std::binary_search
   * std::equal_range, std::lower_bound, std::upper_bound
   * std::min_element, std::max_element
+  * std::nth_element
   * и многие другие
 
 Контейнеры:
@@ -250,7 +250,7 @@ exists a b, a <= __pivot && __pivot <= b
 ```
 exists a b, !(__pivot < __a) && !(__b < __pivot)
 ```
-которое и гарантировало бы что циклы while не выйдёт за границы массива.
+которое и гарантировало бы что циклы while не выйдут за границы массива.
 
 Но особенность нашего компаратора заключается как раз в том, что замена
 ```
@@ -357,7 +357,9 @@ comp_normal(special_obj1, normal_obj)
 }
 ```
 
-Правильное решение - использовать `std::tie` и встроенный оператор сравнения кортежей.
+Правильные решения:
+  * использовать `std::tie` и встроенный оператор сравнения кортежей
+  * с C++20 - использовать реализацию `operator <` по умолчанию
 
 4) массивы содержащие NaN
 
@@ -497,7 +499,8 @@ TODO
 
 == Что почитать ==
 
-D. Kutenin [Changing std::sort at Google’s Scale and Beyond](https://danlark.org/2022/04/20/changing-stdsort-at-googles-scale-and-beyond/)
+* Danila Kutenin [Changing std::sort at Google’s Scale and Beyond](https://danlark.org/2022/04/20/changing-stdsort-at-googles-scale-and-beyond/)
+* Jonathan Müller [Mathematics behind Comparison](https://www.foonathan.net/2018/06/equivalence-relations/)
 
 == Домашнее задание ==
 
