@@ -266,7 +266,9 @@ __comp(a, __pivot) -> !__comp(__pivot, __a)
 компараторы должны удовлетворять набору специальных правил,
 называемых аксиомами.
 
-TODO: применимы ли аксиомы к другим языкам?
+Эти аксиомы не специфичны для C++ и встречаются также в других языках,
+например [Java](https://docs.oracle.com/javase/8/docs/api/java/lang/Comparable.html)
+и [C](https://pubs.opengroup.org/onlinepubs/009696899/functions/qsort.html).
 
 == Аксиомы компараторов: частичный порядок ==
 
