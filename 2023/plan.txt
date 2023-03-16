@@ -206,14 +206,15 @@ Shadow byte legend (one shadow byte represents 8 application bytes):
 _RandomAccessIterator
 __unguarded_partition(_RandomAccessIterator __first,
                       _RandomAccessIterator __last,
-                      T __pivot)
+                      T __pivot,
+                      _Compare __comp)
 {
   while (true)
     {
-      while (*__first < __pivot))
+      while (__comp(*__first, __pivot))
         ++__first;
       --__last;
-      while (__pivot < *__last))
+      while (__comp(__pivot, *__last))
         --__last;
       if (!(__first < __last))
         return __first;
@@ -243,8 +244,10 @@ __unguarded_partition_pivot(_RandomAccessIterator __first,
 
 Т.о. образом при входе в цикл всегда существуют элементы массива, т.ч.
 ```
-exists a b, a <= __pivot && __pivot <= b
+exists a b, __comp(a, __pivot) && __comp(__pivot, b)
 ```
+(это упрощение т.к. вообще говоря опорный элемент может совпадать с граничными,
+но ограничимся им для простоты формул).
 
 Из этого по идее должно следовать условие что
 ```
@@ -254,7 +257,7 @@ exists a b, !(__pivot < __a) && !(__b < __pivot)
 
 Но особенность нашего компаратора заключается как раз в том, что замена
 ```
-a <= __pivot <-> !(__pivot < __a)
+__comp(a, __pivot) -> !__comp(__pivot, __a)
 ```
 неправомерна и приводит к тому, что нужный инвариант цикла перестаёт выполняться
 и происходит переполнение буфера.
@@ -262,6 +265,8 @@ a <= __pivot <-> !(__pivot < __a)
 Для того чтобы таких ошибок не происходило,
 компараторы должны удовлетворять набору специальных правил,
 называемых аксиомами.
+
+TODO: применимы ли аксиомы к другим языкам?
 
 == Аксиомы компараторов: частичный порядок ==
 
@@ -305,47 +310,15 @@ bool equiv(T a, T b) { return comp(a, b) == false && comp(b, a) == false; }
 
 == Spaceship-оператор и другие виды порядков в C++20 ==
 
-TODO
+TODO: нужно ли это?
 
 == Примеры ошибок со stackoverflow и OSS проектов ==
 
-1) использование `<=` вместо `<`
+1) неправильная реализация лексикографического порядка
 
-Уже видели вначале
-
-https://stackoverflow.com/questions/40483971/program-crash-in-stdsort-sometimes-cant-reproduce
-https://stackoverflow.com/questions/65468629/stl-sort-debug-assertion-failed
-
-2) сравнение особых объектов отдельным алгоритмом
-
-```
-[](Object l, Object r) {
-  if (is_special(l) && is_special(r))
-    return comp_special(l, r);
-  else
-    return comp_normal(l, r);
-}
-```
-
-Очень легко нарушить условие транзитивности.
-
-Например если
-```
-comp_special(special_obj1, special_obj2) && comp_normal(special_obj2, normal_obj)
-```
-то должно быть
-```
-comp_normal(special_obj1, normal_obj)
-```
-но это часто не выполняется т.к `comp_special` и `comp_normal` как правило
-логически (и алгоритмически) никак не связаны между собой.
-
-Пример из жизни: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=68988
-
-3) неправильная реализация лексикографического порядка
+Это пожалуй самый распространённая ошибка при написании компараторов.
 
 Не сравнивается первый элемент структуры на равенство при сравнение второго:
-
 ```
 [](SomeClass l, SomeClass r) {
   if (l.first < r.first)
@@ -357,9 +330,52 @@ comp_normal(special_obj1, normal_obj)
 }
 ```
 
-Правильные решения:
-  * использовать `std::tie` и встроенный оператор сравнения кортежей
-  * с C++20 - использовать реализацию `operator <` по умолчанию
+Можно исправить, добавив сравнение:
+```
+[](SomeClass l, SomeClass r) {
+  if (l.first < r.first)
+    return true;
+  if (r.first < l.first)
+    return false;
+  else if (l.second < r.second)
+    return true;
+  else
+    return false;
+}
+```
+но более правильные решения:
+  * использовать `std::tie` и встроенный оператор сравнения кортежей:
+```
+[](SomeClass l, SomeClass r) {
+  return std::tie(l.first, l.second) < std::tie(r.first, r.second);
+}
+```
+  * с C++20 - использовать реализацию `operator <` (или `operator <=>`) по умолчанию
+
+2) Использование нестрогого порядка вместо строгого
+
+Пример этой ошибки мы уже видели вначале
+
+https://stackoverflow.com/questions/40483971/program-crash-in-stdsort-sometimes-cant-reproduce
+https://stackoverflow.com/questions/65468629/stl-sort-debug-assertion-failed
+
+3) Отрицание строгого порядка не является строгим порядком
+
+Другая вариация той же ошибки:
+```
+auto lt = std::less<int>();
+auto inv_lt = std::not2(lt);
+
+std::sort(..., ..., inv_lt);
+```
+
+В данном случае программист рассчитывал на то что отрицание корректного компаратора
+также является компаратором.
+
+Это не так: отрицанием строгого порядка является нестрогий порядок,
+который как мы видели в начале презентации приводит к ошибкам.
+
+https://schneide.blog/2010/11/01/bug-hunting-fun-with-stdsort/
 
 4) массивы содержащие NaN
 
@@ -371,7 +387,7 @@ comp_normal(special_obj1, normal_obj)
 как эквивалентный остальным числам.
 
 Это приводит к нарушению транзитивности отношения эквивалентности:
-1.0 ~ NAN и NAN ~ 2.0, но !(1.0 ~ 2.0).
+`1.0 ~ NAN` и `NAN ~ 2.0`, но не `1.0 ~ 2.0`.
 
 На практике это приводит к неправильной сортировке массивов содержащих NaNs:
 
@@ -405,6 +421,24 @@ nan
 200
 ```
 
+Исправить эту программу несложно - достаточно перед сортировкой
+избавиться от NaN'ов с помощью std::partition:
+```
+auto end = std::partition(&a[0], &a[sizeof(a)/sizeof(a[0])],
+                            [](double x) { return !isnan(x); });
+std::sort(&a[0], end);
+```
+
+Такой код отработает корректно:
+```
+3
+5
+11
+100
+200
+nan
+```
+
 https://stackoverflow.com/questions/9244243/strict-weak-ordering-and-stdsort
 
 5) некорректная обработка специального случая
@@ -417,24 +451,43 @@ https://stackoverflow.com/questions/9244243/strict-weak-ordering-and-stdsort
     ...
 }
 
-В данном случае нарушаются требования иррефлексивности и антисимметричности.
+В данном случае нарушаются требования иррефлексивности и антисимметричности
+в случае когда второй операнд также нулевой.
+
+Достаточно корректно обработать этот случай:
+```
+if (!l.get())
+  return r.get();
+```
 
 https://stackoverflow.com/questions/55815423/stdsort-crashes-with-strict-weak-ordering-comparing-with-garbage-values
 
-6) Отрицание строгого порядка не является строгим порядком
+6) сравнение особых объектов отдельным алгоритмом
 
 ```
-auto less = [](Object l, Object r) { return l < r; };
-auto inv_less = std::not2(less);
+[](Object l, Object r) {
+  if (is_special(l) && is_special(r))
+    return comp_special(l, r);
+  else
+    return comp_normal(l, r);
+}
 ```
 
-В данном случае программист рассчитывал на то что отрицание корректного компаратора
-также является компаратором.
+Очень легко нарушить условие транзитивности.
 
-Это не так: отрицанием строгого порядка является нестрогий порядок,
-который как мы видели в начале презентации приводит к ошибкам.
+Например если
+```
+comp_special(special_obj1, special_obj2) && comp_normal(special_obj2, normal_obj)
+```
+то должно быть
+```
+comp_normal(special_obj1, normal_obj)
+```
+но это часто не выполняется т.к `comp_special` и `comp_normal` как правило
+логически (и алгоритмически) никак не связаны между собой
+(обычно они сравнивают совершенно разные поля объектов).
 
-https://schneide.blog/2010/11/01/bug-hunting-fun-with-stdsort/
+Пример из жизни: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=68988
 
 == Отладочные средства в тулчейнах ==
 
