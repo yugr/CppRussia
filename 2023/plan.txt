@@ -267,8 +267,9 @@ __comp(a, __pivot) -> !__comp(__pivot, __a)
 называемых аксиомами.
 
 Эти аксиомы не специфичны для C++ и встречаются также в других языках,
-например [Java](https://docs.oracle.com/javase/8/docs/api/java/lang/Comparable.html)
-и [C](https://pubs.opengroup.org/onlinepubs/009696899/functions/qsort.html).
+например [Java](https://docs.oracle.com/javase/8/docs/api/java/lang/Comparable.html),
+[C](https://pubs.opengroup.org/onlinepubs/009696899/functions/qsort.html)
+и [Lua](https://stackoverflow.com/a/49625819/2170527).
 
 == Аксиомы компараторов: частичный порядок ==
 
@@ -292,11 +293,11 @@ __comp(a, __pivot) -> !__comp(__pivot, __a)
 ```
 bool equiv(T a, T b) { return comp(a, b) == false && comp(b, a) == false; }
 ```
-Его называют отношением несравнимости (incomparability).
+Его называют отношением несравнимости (incomparability) или эквивалентности.
 
 Это отношение определяет что два элемента типа "неразличимы" с точки зрения компаратора `comp`.
 Оно похоже на некоторое "равенство" или эквивалентность элементов типа друг другу
-(которое вообще говоря никак не связано с равенством, задаваемым `operator ==` класса).
+Вообще говоря оно никак не связано с равенством, задаваемым `operator ==` класса.
 
 Так вот, отношение `equiv` должно удовлетворять четвёртой аксиоме:
 
@@ -306,7 +307,7 @@ bool equiv(T a, T b) { return comp(a, b) == false && comp(b, a) == false; }
 
 == Понятие о strict weak ordering ==
 
-Алгоритмы сортировки полагаются на все 4 приведённых аксиомы.
+Алгоритмы сортировки полагаются на все 4 приведённые аксиомы.
 
 Все вместе они называются термином "строгий слабый порядок" (strict weak ordering)
 
@@ -352,7 +353,7 @@ TODO: нужно ли это?
   return std::tie(l.first, l.second) < std::tie(r.first, r.second);
 }
 ```
-  * с C++20 - использовать реализацию `operator <` (или `operator <=>`) по умолчанию
+  * с C++20 - использовать реализацию `operator <=>` по умолчанию
 
 2) Использование нестрогого порядка вместо строгого
 
@@ -528,29 +529,87 @@ Libc++ provides some checks for the consistency of comparators passed to algorit
 
 Два простых динамических чекера для проверки корректности в рантайме:
 
-  * SortChecker:
-    - https://github.com/yugr/sortcheck
+  * SortChecker (https://github.com/yugr/sortcheck)
     - работает с программами на C
     - перехватывает и проверяет API типа `qsort` и `bsearch`
     - основан на динамической инструментации (`LD_PRELOAD`)
-  * SortChecker++
-    - https://github.com/yugr/sortcheckxx
+    - 15 ошибок в различных OSS проектах (GCC, Harfbuzz, etc.)
+  * SortChecker++ (https://github.com/yugr/sortcheckxx)
     - работает с программами на C++
-    - проверяет API типа `std::sort`
+    - перехватывает и проверяет API типа `std::sort`
     - основан на source-to-source инструментации (Clang-based)
+    - 5 ошибок в различных OSS проектах
 
-TODO:
-  - пример использования
-  - псевдокод
-  - ограничения (нет поддержки `<=>`, не поддержаны все алгоритмы например `nth_element`)
-  - сложность и как с ней бороться
-  - результаты
+== Как использовать ==
 
-== Квадратичный алгоритм проверки Д. Кутенина ==
+Вначале инструментируем код:
+```
+sortcheckxx/bin/SortChecker tmp.cc -- -DN=50
+```
 
-https://github.com/danlark1/quadratic_strict_weak_ordering
+По большому счёта вся инструментация сводится к замене
+вызова стандартной `std::sort`
+```
+std::sort(vals.begin(), vals.end(),
+          [](int l, int r) { return l <= r; });
+```
+на отладочную обёртку
+```
+sortcheck::sort_checked(vals.begin(), vals.end(),
+          [](int l, int r) { return l <= r; }, __FILE__, __LINE__);
+```
 
-TODO
+Скомпилировав и запустив инструментированный код
+```
+g++ -g -DN=50 -I sortcheckxx/include tmp.cc
+./a.out
+```
+получаем
+```
+sortcheck: tmp.cc:14: irreflexive comparator at position 0
+Aborted
+```
+
+== Псевдокод ==
+
+Каждый запуск `std::sort` и аналогичных API предваряется проверками:
+
+```
+for x in array
+  if comp(x, x)
+    error
+
+for x, y in array
+  if comp(x, y) !=  comp(y, x)
+    error
+
+for x, y, z in array
+  if comp(x, y) && comp(y, x) && !comp(x, z)
+    error
+
+for x, y, z in array
+  if equiv(x, y) && equiv(y, x) && !equiv(x, z)
+    error
+```
+
+Можно видеть что сложность проверок составляет `O(N^3)`, что существенно превосходит даже `std::sort`,
+не говоря о более быстрых алгоритмах (`std::max_element`, etc.).
+
+Поэтому на практике обходится не весь массив, а его небольшое подмножество (20-30 элементов).
+
+== Ограничения SortChecker++ ==
+
+* Нет поддержки `<=>`
+* Не поддержаны все алгоритмы например `nth_element`
+
+== Квадратичный алгоритм проверки ==
+
+* https://github.com/danlark1/quadratic_strict_weak_ordering
+* Предложен Д. Кутениным в начале 2023 года
+* Идея алгоритма:
+  * Предварительно отсортировать массив устойчивым алгоритмом
+  * Выделять в отсортированном массиве префиксы эквивалентных элементов
+  * И проверять их на транзитивность с оставшейся частью массива
 
 == Что почитать ==
 
@@ -566,8 +625,10 @@ TODO
 
 == Другие типы ошибок в компараторных API ==
 
-0) Неотсортированные массивы в API типа `bsearch` (поддерживается в SortChecker)
-1) Неопределённый порядок сортировки эквивалентных элементов (поддерживается в libc++ с помощью рандомизации `-D_LIBCPP_DEBUG_RANDOMIZE_UNSPECIFIED_STABILITY_SEED')
+1) Неотсортированные массивы в API типа `bsearch`
+  * поддерживается в SortChecker/SortChecker++
+2) Неопределённый порядок сортировки эквивалентных элементов
+  * проверяется в libc++ с помощью рандомизации `-D_LIBCPP_DEBUG_RANDOMIZE_UNSPECIFIED_STABILITY_SEED'
 
 == Заключение ==
 
