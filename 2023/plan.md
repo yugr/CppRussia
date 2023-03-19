@@ -6,7 +6,7 @@
 в open-source проектах. Современные тулчейны предоставляют средства для отслеживания таких ошибок и
 о них будет рассказано в докладе.
 
-== Введение ==
+# Введение
 
 Компаратор - функция сравнения элементов типа,
 которая используется различными алгоритмами и контейнерами
@@ -16,18 +16,18 @@
 с помощью операторов `<` или (с C++20) `<=>`.
 
 Алгоритмы:
-  * std::sort, std::stable_sort
-  * std::binary_search
-  * std::equal_range, std::lower_bound, std::upper_bound
-  * std::min_element, std::max_element
-  * std::nth_element
+  * `std::sort`, `std::stable_sort`
+  * `std::binary_search`
+  * `std::equal_range`, `std::lower_bound`, `std::upper_bound`
+  * `std::min_element`, `std::max_element`
+  * `std::nth_element`
   * и многие другие
 
 Контейнеры:
-  * std::map, std::multimap
-  * std::set, std::multiset
+  * `std::map`, `std::multimap`
+  * `std::set`, `std::multiset`
 
-== Пример ошибки ==
+# Пример ошибки
 
 Рассмотрим простую программу:
 
@@ -197,7 +197,7 @@ Shadow byte legend (one shadow byte represents 8 application bytes):
 
 Итак мы видим что неправильные компараторы могут приводить к серьезным проблемам.
 
-== Причина ошибки ==
+# Причина ошибки
 
 Данный код выполняет основной шаг быстрой сортировки -
 разбиение массива по опорному элементу `__pivot`
@@ -271,7 +271,7 @@ __comp(a, __pivot) -> !__comp(__pivot, __a)
 [C](https://pubs.opengroup.org/onlinepubs/009696899/functions/qsort.html)
 и [Lua](https://stackoverflow.com/a/49625819/2170527).
 
-== Аксиомы компараторов: частичный порядок ==
+# Аксиомы компараторов: частичный порядок
 
 Аксиомы, которым должны подчиняться компараторы, изложены в стандарте языка,
 но проще воспользовать Cppref: https://en.cppreference.com/w/cpp/named_req/Compare
@@ -286,7 +286,7 @@ __comp(a, __pivot) -> !__comp(__pivot, __a)
 
 Такие компараторы называются строгими частичными порядками и знакомы многим из курса общей алгебры.
 
-== Аксиомы компараторов: несравнимость ==
+# Аксиомы компараторов: несравнимость
 
 Для того чтобы ввести ещё одну, последнюю аксиому нам надо сначала заметить
 что каждый с каждым компаратором связано ещё одна функция ("отношение" в терминах алгебры),
@@ -305,17 +305,17 @@ bool equiv(T a, T b) { return comp(a, b) == false && comp(b, a) == false; }
 
 (транзитивность несравнимости).
 
-== Понятие о strict weak ordering ==
+# Понятие о strict weak ordering
 
 Алгоритмы сортировки полагаются на все 4 приведённые аксиомы.
 
 Все вместе они называются термином "строгий слабый порядок" (strict weak ordering)
 
-== Spaceship-оператор и другие виды порядков в C++20 ==
+# Spaceship-оператор и другие виды порядков в C++20
 
 TODO: нужно ли это?
 
-== Примеры ошибок со stackoverflow и OSS проектов ==
+# Примеры ошибок со stackoverflow и OSS проектов
 
 1) неправильная реализация лексикографического порядка
 
@@ -492,7 +492,7 @@ comp_normal(special_obj1, normal_obj)
 
 Пример из жизни: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=68988
 
-== Отладочные средства в тулчейнах ==
+# Отладочные средства в тулчейнах
 
 В libstdc++ с помощью макроса `-D_GLIBCXX_DEBUG` можно включить дополнительную проверку
 иррефлексивности:
@@ -525,7 +525,7 @@ Libc++ provides some checks for the consistency of comparators passed to algorit
 поэтому не могут провести полную проверку корректности
 (и в частности проверку условия транзитивности).
 
-== SortChecker ==
+# SortChecker
 
 Два простых динамических чекера для проверки корректности в рантайме:
 
@@ -540,7 +540,7 @@ Libc++ provides some checks for the consistency of comparators passed to algorit
     - основан на source-to-source инструментации (Clang-based)
     - 5 ошибок в различных OSS проектах
 
-== Как использовать ==
+# Как использовать
 
 Вначале инструментируем код:
 ```
@@ -570,7 +570,7 @@ sortcheck: tmp.cc:14: irreflexive comparator at position 0
 Aborted
 ```
 
-== Псевдокод ==
+# Псевдокод
 
 Каждый запуск `std::sort` и аналогичных API предваряется проверками:
 
@@ -597,12 +597,12 @@ for x, y, z in array
 
 Поэтому на практике обходится не весь массив, а его небольшое подмножество (20-30 элементов).
 
-== Ограничения SortChecker++ ==
+# Ограничения SortChecker++
 
 * Нет поддержки `<=>`
 * Не поддержаны все алгоритмы например `nth_element`
 
-== Квадратичный алгоритм проверки ==
+# Квадратичный алгоритм проверки
 
 * https://github.com/danlark1/quadratic_strict_weak_ordering
 * Предложен Д. Кутениным в начале 2023 года
@@ -611,26 +611,26 @@ for x, y, z in array
   * Выделять в отсортированном массиве префиксы эквивалентных элементов
   * И проверять их на транзитивность с оставшейся частью массива
 
-== Что почитать ==
+# Что почитать
 
 * Danila Kutenin [Changing std::sort at Google’s Scale and Beyond](https://danlark.org/2022/04/20/changing-stdsort-at-googles-scale-and-beyond/)
 * Jonathan Müller [Mathematics behind Comparison](https://www.foonathan.net/2018/06/equivalence-relations/)
 
-== Домашнее задание ==
+# Домашнее задание
 
 1) Изучите типичные ошибки и не повторяйте их в работе
 2) Включите `GLIBCXX_DEBUG` и `_LIBCPP_ENABLE_DEBUG_MODE` в своём CI
 3) Натравите `Sortchecker` (и `Sortchecker++`) на свой код
     * сообщения об ошибках и дополнения приветствуются!
 
-== Другие типы ошибок в компараторных API ==
+# Другие типы ошибок в компараторных API
 
 1) Неотсортированные массивы в API типа `bsearch`
   * поддерживается в SortChecker/SortChecker++
 2) Неопределённый порядок сортировки эквивалентных элементов
   * проверяется в libc++ с помощью рандомизации `-D_LIBCPP_DEBUG_RANDOMIZE_UNSPECIFIED_STABILITY_SEED'
 
-== Заключение ==
+# Заключение
 
 Результаты получены на системе:
 ```
