@@ -1,19 +1,26 @@
-Одним из малоизвестных примеров Undefined Behavior в C/C++ является нарушение требований к функциям сравнения (компараторам).
-Компараторы широко используются в алгоритмах (std::sort, std::binary_search, etc.) и контейнерах (std::set, std::map) и
-встречаются как в C++, так и в C (qsort, bsearch). Компараторы должны удовлетворять некоторым аксиомам,
-которые в математике описываются понятием строгого слабого порядка (strict weak ordering).
-Эти аксиомы неинтуитивны и в них легко ошибиться, о чём свидетельствует большое количество соответствующих багов
-в open-source проектах. Современные тулчейны предоставляют средства для отслеживания таких ошибок и
-о них будет рассказано в докладе.
+Одним из малоизвестных примеров Undefined Behavior в C/C++
+является нарушение требований к функциям сравнения (компараторам).
+Компараторы широко используются в алгоритмах (`std::sort`, `std::binary_search`, etc.)
+и контейнерах (`std::set`, `std::map`) и встречаются как в C++,
+так и в C (qsort, bsearch). Компараторы должны удовлетворять некоторым аксиомам,
+которые в математике описываются понятием строгого слабого порядка
+(strict weak ordering). Эти аксиомы неинтуитивны и в них легко ошибиться,
+о чём свидетельствует большое количество соответствующих багов
+в open-source проектах. Современные тулчейны предоставляют средства
+для отслеживания таких ошибок и о них будет рассказано в докладе.
 
 # Введение
 
-Компаратор - функция сравнения элементов типа,
+Компаратор - функция-предикат для сравнения элементов какого-либо типа,
 которая используется различными алгоритмами и контейнерами
-стандартной библиотеки для упорядочения элементов.
+стандартной библиотеки для упорядочения экземпляров этого типа.
 
 Компаратор может быть указан явно или по умолчанию реализовываться
 с помощью операторов `<` или (с C++20) `<=>`.
+
+Контейнеры:
+  * `std::map`, `std::multimap`
+  * `std::set`, `std::multiset`
 
 Алгоритмы:
   * `std::sort`, `std::stable_sort`
@@ -22,10 +29,6 @@
   * `std::min_element`, `std::max_element`
   * `std::nth_element`
   * и многие другие
-
-Контейнеры:
-  * `std::map`, `std::multimap`
-  * `std::set`, `std::multiset`
 
 # Пример ошибки
 
@@ -195,11 +198,13 @@ Shadow byte legend (one shadow byte represents 8 application bytes):
 ==143607==ABORTING
 ```
 
-Итак мы видим что неправильные компараторы могут приводить к серьезным проблемам.
+Итак мы видим что неправильно написанные компараторы могут приводить к серьезным проблемам.
 
 # Причина ошибки
 
-Данный код выполняет основной шаг быстрой сортировки -
+Давайте заглянем под капот `std::sort` и попробуем разобраться что же пошло не так.
+
+Упавший код выполняет основной шаг быстрой сортировки -
 разбиение массива по опорному элементу `__pivot`
 (код намеренно упрощён):
 ```
@@ -244,14 +249,14 @@ __unguarded_partition_pivot(_RandomAccessIterator __first,
 
 Т.о. образом при входе в цикл всегда существуют элементы массива, т.ч.
 ```
-exists a b, __comp(a, __pivot) && __comp(__pivot, b)
+__comp(a, __pivot) && __comp(__pivot, b)
 ```
 (это упрощение т.к. вообще говоря опорный элемент может совпадать с граничными,
 но ограничимся им для простоты формул).
 
 Из этого по идее должно следовать условие что
 ```
-exists a b, !(__pivot < __a) && !(__b < __pivot)
+!(__pivot < __a) && !(__b < __pivot)
 ```
 которое и гарантировало бы что циклы while не выйдут за границы массива.
 
@@ -267,16 +272,18 @@ __comp(a, __pivot) -> !__comp(__pivot, __a)
 называемых аксиомами.
 
 Эти аксиомы не специфичны для C++ и встречаются также в других языках,
-например [Java](https://docs.oracle.com/javase/8/docs/api/java/lang/Comparable.html),
-[C](https://pubs.opengroup.org/onlinepubs/009696899/functions/qsort.html)
-и [Lua](https://stackoverflow.com/a/49625819/2170527).
+например [C](https://pubs.opengroup.org/onlinepubs/009696899/functions/qsort.html),
+[Java](https://docs.oracle.com/javase/8/docs/api/java/lang/Comparable.html) и
+[Lua](https://stackoverflow.com/a/49625819/2170527).
+
+По сути они задают универсальные требования, при которых можно непротиворечиво упорядочить элементы типа.
 
 # Аксиомы компараторов: частичный порядок
 
 Аксиомы, которым должны подчиняться компараторы, изложены в стандарте языка,
-но проще воспользовать Cppref: https://en.cppreference.com/w/cpp/named_req/Compare
+и в том числе на Cppref: https://en.cppreference.com/w/cpp/named_req/Compare
 
-Грубо говоря компаратор должен вести себя как "нормальный operator <".
+Грубо говоря компаратор должен вести себя как "нормальный" `operator <`.
 
 Во-первых компаратор должен удовлетворять трём логичным аксиомам:
 
@@ -284,26 +291,29 @@ __comp(a, __pivot) -> !__comp(__pivot, __a)
 2) comp(a, b) == true -> comp(b, a) == false (антисимметричность)
 3) comp(a, b) == true && comp(b, c) == true -> comp(a, c) == true (транзитивность)
 
-Такие компараторы называются строгими частичными порядками и знакомы многим из курса общей алгебры.
+Такие компараторы называются строгими частичными порядками и знакомы многим из курса общей алгебры
+(Частично Упорядоченные Множества, Partially Ordered Sets).
 
 # Аксиомы компараторов: несравнимость
 
 Для того чтобы ввести ещё одну, последнюю аксиому нам надо сначала заметить
-что каждый с каждым компаратором связано ещё одна функция ("отношение" в терминах алгебры),
+что каждый с каждым компаратором связанa ещё одна функция ("отношение" в терминах алгебры),
 ```
 bool equiv(T a, T b) { return comp(a, b) == false && comp(b, a) == false; }
 ```
-Его называют отношением несравнимости (incomparability) или эквивалентности.
+Её называют отношением несравнимости (incomparability) или эквивалентности.
 
 Это отношение определяет что два элемента типа "неразличимы" с точки зрения компаратора `comp`.
-Оно похоже на некоторое "равенство" или эквивалентность элементов типа друг другу
-Вообще говоря оно никак не связано с равенством, задаваемым `operator ==` класса.
+Оно похоже на некоторое "равенство" или эквивалентность элементов типа друг другу.
+Вообще говоря оно никак не связано с обычным равенством, задаваемым `operator ==` класса.
 
 Так вот, отношение `equiv` должно удовлетворять четвёртой аксиоме:
 
 4) equiv(a, b) == true && equiv(b, c) == true -> equiv(a,c) == true
 
 (транзитивность несравнимости).
+
+TODO: в чём её смысл
 
 # Понятие о strict weak ordering
 
@@ -323,10 +333,10 @@ TODO: нужно ли это?
 
 Не сравнивается первый элемент структуры на равенство при сравнение второго:
 ```
-[](SomeClass l, SomeClass r) {
-  if (l.first < r.first)
+bool operator<(const SomeClass &rhs) const {
+  if (first < rhs.first)
     return true;
-  else if (l.second < r.second) // FORGOT "&& l.fist == r.first"
+  else if (second < rhs.second) // ЗАБЫЛИ "&& fist == rhs.first"
     return true;
   else
     return false;
@@ -335,15 +345,15 @@ TODO: нужно ли это?
 
 Можно исправить, добавив сравнение:
 ```
-[](SomeClass l, SomeClass r) {
-  if (l.first < r.first)
+bool operator<(const SomeClass &rhs) const {
+  if (first < rhs.first)
     return true;
-  if (r.first < l.first)
-    return false;
-  else if (l.second < r.second)
-    return true;
-  else
-    return false;
+  else if (first == rhs.first) {
+    if (second < rhs.second)
+      return true;
+    else
+      return false;
+  }
 }
 ```
 но более правильные решения:
@@ -353,14 +363,29 @@ TODO: нужно ли это?
   return std::tie(l.first, l.second) < std::tie(r.first, r.second);
 }
 ```
-  * с C++20 - использовать реализацию `operator <=>` по умолчанию
+  * с C++20 - использовать реализацию `operator <=>` по умолчанию:
+```
+auto operator <=>(const SomeClass &) const = default;
+```
+
+Примеры со stackoverflow:
+  * https://stackoverflow.com/questions/48455244/bug-in-stdsort
+  * https://stackoverflow.com/questions/53712873/sorting-a-vector-of-a-custom-class-with-stdsort-causes-a-segmentation-fault
+  * https://stackoverflow.com/questions/68225770/sorting-vector-of-pair-using-lambda-predicate-crashing-with-memory-corruption
+  * https://stackoverflow.com/questions/72737018/stdsort-results-in-a-segfault
 
 2) Использование нестрогого порядка вместо строгого
 
 Пример этой ошибки мы уже видели вначале
 
-https://stackoverflow.com/questions/40483971/program-crash-in-stdsort-sometimes-cant-reproduce
-https://stackoverflow.com/questions/65468629/stl-sort-debug-assertion-failed
+Ещё примеры со stackoverflow.com:
+  * https://stackoverflow.com/questions/40483971/program-crash-in-stdsort-sometimes-cant-reproduce
+  * https://stackoverflow.com/questions/65468629/stl-sort-debug-assertion-failed
+  * https://stackoverflow.com/questions/18291620/why-will-stdsort-crash-if-the-comparison-function-is-not-as-operator
+  * https://stackoverflow.com/questions/19757210/stdsort-from-algorithm-crashes
+  * https://stackoverflow.com/questions/64014782/c-program-crashes-when-trying-to-sort-a-vector-of-strings
+  * https://stackoverflow.com/questions/70869803/c-code-crashes-when-trying-to-sort-2d-vector
+  * https://stackoverflow.com/questions/67553073/std-sort-sometimes-throws-seqmention-fault
 
 3) Отрицание строгого порядка не является строгим порядком
 
@@ -378,7 +403,7 @@ std::sort(..., ..., inv_lt);
 Это не так: отрицанием строгого порядка является нестрогий порядок,
 который как мы видели в начале презентации приводит к ошибкам.
 
-https://schneide.blog/2010/11/01/bug-hunting-fun-with-stdsort/
+Пример из жизни: https://schneide.blog/2010/11/01/bug-hunting-fun-with-stdsort/
 
 4) массивы содержащие NaN
 
@@ -442,7 +467,7 @@ std::sort(&a[0], end);
 nan
 ```
 
-https://stackoverflow.com/questions/9244243/strict-weak-ordering-and-stdsort
+Пример из жизни: https://stackoverflow.com/questions/9244243/strict-weak-ordering-and-stdsort
 
 5) некорректная обработка специального случая
 
@@ -464,7 +489,9 @@ if (!l.get())
   return r.get();
 ```
 
-https://stackoverflow.com/questions/55815423/stdsort-crashes-with-strict-weak-ordering-comparing-with-garbage-values
+Примеры со stackoverflow:
+  * https://stackoverflow.com/questions/55815423/stdsort-crashes-with-strict-weak-ordering-comparing-with-garbage-values
+  * https://stackoverflow.com/questions/48972158/crash-in-stdsort-sorting-without-strict-weak-ordering
 
 6) сравнение особых объектов отдельным алгоритмом
 
@@ -513,12 +540,11 @@ sort(_RandomAccessIterator __first, _RandomAccessIterator __last,
 ```
 (она бы нашла ошибку из начала презентации).
 
-Libc++ [comparator consistency checks](https://libcxx.llvm.org/DesignDocs/DebugMode.html):
+В libc++ [проверяется асимметричность](https://libcxx.llvm.org/DesignDocs/DebugMode.html)
 ```
 Libc++ provides some checks for the consistency of comparators passed to algorithms. Specifically, many algorithms such as binary_search, merge, next_permutation, and sort, wrap the user-provided comparator to assert that !comp(y, x) whenever comp(x, y). This can cause the user-provided comparator to be evaluated up to twice as many times as it would be without the debug mode, and causes the library to violate some of the Standard’s complexity clauses.
 ```
-
-Включается с помощью `-D_LIBCPP_ENABLE_DEBUG_MODE`.
+Чтобы включить её нужно указать при компиляции `-D_LIBCPP_ENABLE_DEBUG_MODE`.
 
 Обе опции имеют существенный (2x) оверхед, поэтому их рекомендуется использовать только для тестирования.
 
@@ -603,7 +629,7 @@ for x, y, z in array
 * Нет поддержки `<=>`
 * Не поддержаны все алгоритмы например `nth_element`
 
-# Квадратичный алгоритм проверки
+# Быстрый алгоритм проверки
 
 * https://github.com/danlark1/quadratic_strict_weak_ordering
 * Предложен Д. Кутениным в начале 2023 года
@@ -611,6 +637,7 @@ for x, y, z in array
   * Предварительно отсортировать массив устойчивым алгоритмом
   * Выделять в отсортированном массиве префиксы эквивалентных элементов
   * И проверять их на транзитивность с оставшейся частью массива
+* Снижает сложность до `O(N^2)` (по прежнему превосходит сложность большинства алгоритмов)
 
 # Что почитать
 
