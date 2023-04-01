@@ -640,7 +640,7 @@ Libc++ provides some checks for the consistency of comparators passed to algorit
     - перехватывает и проверяет API типа `std::sort`
     - основан на source-to-source инструментации (Clang-based)
     - 5 ошибок в различных OSS проектах
-    - TODO: поддержка `<=>`, поддержка всех релевантных алгоритмов (`nth_element`, etc.)
+    - TODO: поддержка всех релевантных алгоритмов (`nth_element`, etc.)
 
 # Как использовать
 
