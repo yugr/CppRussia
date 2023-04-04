@@ -301,14 +301,14 @@ __comp(a, __pivot) -> !__comp(__pivot, __a)
 Например невозможно отсортировать элементы в игре камень-ножницы-бумага,
 т.к. они не удовлетворяют аксиоме транзитивности.
 
-# Аксиомы компараторов: несравнимость
+# Аксиомы компараторов: эквивалентность
 
 Для того чтобы сформулировать последнюю аксиому нам надо сначала заметить
 что с каждым компаратором связанa ещё одна функция ("отношение" в терминах алгебры):
 ```
 bool equiv(T a, T b) { return comp(a, b) == false && comp(b, a) == false; }
 ```
-Её называют отношением несравнимости (incomparability) или эквивалентности.
+Её называют отношением эквивалентности или несравнимости (incomparability).
 
 Это отношение определяет что два элемента типа "неразличимы" с точки зрения компаратора `comp`.
 Оно похоже на некоторое "равенство" или эквивалентность элементов типа друг другу.
@@ -431,6 +431,7 @@ auto operator <=>(const SomeClass &) const = default;
   * https://stackoverflow.com/questions/53712873/sorting-a-vector-of-a-custom-class-with-stdsort-causes-a-segmentation-fault
   * https://stackoverflow.com/questions/68225770/sorting-vector-of-pair-using-lambda-predicate-crashing-with-memory-corruption
   * https://stackoverflow.com/questions/72737018/stdsort-results-in-a-segfault
+  * https://stackoverflow.com/questions/33547566/strict-weak-ordering-operator-in-c
 
 2) Использование нестрогого порядка вместо строгого
 
@@ -593,6 +594,9 @@ bool cmp(double a, double b) {
 ```
 equiv(0, 0.5 * eps) == true && equiv(0.5 * eps, eps) == true && cmp(0, eps) == false
 ```
+
+Пример:
+  * https://stackoverflow.com/questions/68114060/does-using-epsilon-in-comparison-of-floating-point-break-strict-weak-ordering
 
 # Отладочные средства в тулчейнах
 
