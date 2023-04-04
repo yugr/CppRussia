@@ -273,8 +273,11 @@ __comp(a, __pivot) -> !__comp(__pivot, __a)
 
 Эти аксиомы не специфичны для C++ и встречаются также в других языках,
 например [C](https://pubs.opengroup.org/onlinepubs/009696899/functions/qsort.html),
-[Java](https://docs.oracle.com/javase/8/docs/api/java/lang/Comparable.html) и
-[Lua](https://stackoverflow.com/a/49625819/2170527).
+[Java](https://docs.oracle.com/javase/8/docs/api/java/lang/Comparable.html),
+[Lua](https://stackoverflow.com/a/49625819/2170527),
+[Swift](https://developer.apple.com/documentation/swift/contiguousarray/sort(by:)),
+[JavaScript](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/sort)
+и [Rust](https://doc.rust-lang.org/std/primitive.slice.html#method.sort_by).
 
 По сути они задают универсальные требования, при которых можно непротиворечиво упорядочить элементы типа.
 
@@ -325,6 +328,18 @@ bool equiv(T a, T b) { return comp(a, b) == false && comp(b, a) == false; }
 и эти группы будут вести себя одинаково в сравнениях:
 сравнение любого экземпляра группы с другими элементами множества будет давать
 одинаковый результат независимо от выбора экземпляра.
+
+Если эта аксиома нарушается, то это означает что в сортируемом
+типе есть объект, которые эквивалентен двум объектам, один из которых меньше другого:
+```
+equiv(X, a) && equiv(X, b) && comp(a, b)
+```
+В таком случае непонятно в каком порядке расположить эти элементы:
+```
+X, a, b
+a, X, b
+a, b, X
+```
 
 # Strict weak ordering
 
@@ -641,10 +656,10 @@ Libc++ provides some checks for the consistency of comparators passed to algorit
     - 15 ошибок в различных OSS проектах (GCC, Harfbuzz, etc.)
   * SortChecker++ (https://github.com/yugr/sortcheckxx)
     - работает с программами на C++
-    - перехватывает и проверяет API типа `std::sort`
+    - перехватывает и проверяет API типа `std::sort` и контейнеры типа `std::map`
     - основан на source-to-source инструментации (Clang-based)
     - 5 ошибок в различных OSS проектах
-    - TODO: поддержка всех релевантных алгоритмов (`nth_element`, etc.)
+    - TODO: поддержать все релевантные алгоритмы (`nth_element`, etc.)
 
 # Как использовать
 
@@ -653,7 +668,7 @@ Libc++ provides some checks for the consistency of comparators passed to algorit
 sortcheckxx/bin/SortChecker tmp.cc -- -DN=50
 ```
 
-По большому счёта вся инструментация сводится к замене
+По большому счёту вся инструментация сводится к замене
 вызова стандартной `std::sort`
 ```
 std::sort(vals.begin(), vals.end(),
@@ -722,12 +737,12 @@ for x, y, z in array
 
 1) Изучите типичные ошибки и не повторяйте их в работе
 2) Включите `GLIBCXX_DEBUG` и `_LIBCPP_ENABLE_DEBUG_MODE` в своём CI
-3) Натравите `Sortchecker` (и `Sortchecker++`) на свой код
+3) Примените `Sortchecker` и `Sortchecker++` к своему коду
     * сообщения об ошибках и дополнения приветствуются!
 
 # Другие типы ошибок в компараторных API
 
-1) Неотсортированные массивы в API типа `bsearch`
+1) Неотсортированные массивы в API типа `std::binary_search`
   * поддерживается в SortChecker/SortChecker++
 2) Неопределённый порядок сортировки эквивалентных элементов
   * проверяется в libc++ с помощью рандомизации `-D_LIBCPP_DEBUG_RANDOMIZE_UNSPECIFIED_STABILITY_SEED'
