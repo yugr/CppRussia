@@ -341,6 +341,9 @@ a, X, b
 a, b, X
 ```
 
+Аксиома эквивалентности - необходимое условие всех "быстрых" алгоритмов сортировки
+(см. обсуждение в [Why do we need transitivity of equivalence](https://stackoverflow.com/questions/75970396/why-do-we-need-transitivity-of-equivalence).
+
 # Strict weak ordering
 
 Алгоритмы сортировки полагаются на все 4 приведённые аксиомы. Некоторые из них могут быть выведены из остальных.
