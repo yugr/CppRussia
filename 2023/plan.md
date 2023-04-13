@@ -710,15 +710,15 @@ for x in array
     error
 
 for x, y in array
-  if comp(x, y) !=  comp(y, x)
+  if comp(x, y) != comp(y, x)
     error
 
 for x, y, z in array
-  if comp(x, y) && comp(y, x) && !comp(x, z)
+  if comp(x, y) && comp(y, z) && !comp(x, z)
     error
 
 for x, y, z in array
-  if equiv(x, y) && equiv(y, x) && !equiv(x, z)
+  if equiv(x, y) && equiv(y, z) && !equiv(x, z)
     error
 ```
 
@@ -745,7 +745,7 @@ for x, y, z in array
 # Домашнее задание
 
 1) Изучите типичные ошибки и не повторяйте их в работе
-2) Включите `GLIBCXX_DEBUG` и `_LIBCPP_ENABLE_DEBUG_MODE` в своём CI
+2) Включите `_GLIBCXX_DEBUG` и `_LIBCPP_ENABLE_DEBUG_MODE` в своём CI
 3) Примените `Sortchecker` и `Sortchecker++` к своему коду
     * сообщения об ошибках и дополнения приветствуются!
 
