@@ -20,33 +20,44 @@
 * But also has disadvantages
   * additional startup overheads to load library and locate symbols
   * DLL boundary blocks optimizations
+  * more fragile in use (DLL hell)
 
 # How DLLs work, in general
 
-* DLL is a standalone executable module
+* DLL is a executable module
+  * Usually of same format as normal executables i.e. PE on Windows, ELF on Linux, Mach-O on macOS
 * Keeps track of its exported symbols in special section
-  * Symmetrically, executable keeps track of its imported symbols
-* Each imported symbols has a slot in special address table (GOT/IAT)
-  * Table is initialized by loader/runtime linker (actually details vary here)
-    * This process is called "symbol resolution"
-  * Direct calls would be bad for cache, take long time to update at startup and may be limited in range
-* Common sources of overheads:
-  * DLL load overhead (memory mapping, relocation if needed + initialization/constructors)
-  * call via pointer at runtime:
+* Executable also keeps track of its imported symbols
+* Each imported function has a slot in special "address table" (GOT/IAT)
+* Calls to imported functions are done through this table:
 ```
+# Windows
 call qword ptr [__imp_foo]
+
+# Linux
 jmp  *foo@GOTPCREL(%rip)
 ```
+  * Using direct calls would require a lot of code patching at startup to update addresses in `call` instructions
+    * Long time to update
+    * Bad for I-cache
+    * On some platforms direct calls are limited in range (e.g. 4G) so would limit possible DLL load addresses
+* Table is initialized by loader/runtime linker (actually details vary here)
+  * This process is called "symbol resolution"
+* We can already see common sources of overheads when using DLLs (versus static libs):
+  * overheads when loading the library (relocation, more on this later)
+  * symbol resolution
+  * call via pointer at runtime
 
 # Windows specifics
 
 * Windows executables and DLLs follow PE binary format
 * Executable consists of a header and several sections
-  * Section is a piece of information with similar properties
-  * E.g. code section, rodata section, etc.
-* Imported symbols are stored in special `.idata` section which contains so called Import Directory Table
-* Each entry in the table holds info about single imported DLL and symbols (functions or globals) which come from it
-  * Symbols in import table are bound to particular DLL!
+  * Section is a piece of code/data with similar properties
+  * E.g. code section, read-only data section, etc.
+* Imported symbols are stored in special `.idata` section in executable
+  * Contains the Import Directory Table
+  * Each entry in the table holds info about single imported DLL and symbols (functions or globals) which come from it
+    * Symbols in import table are bound to particular DLL!
 
 # Linux specifics
 
@@ -55,27 +66,51 @@ jmp  *foo@GOTPCREL(%rip)
 * But most importantly imported symbols are not bound to particular DLL at binary level
   * Symbols searched globally across all loaded DLLs at runtime (so called symbol resolution)
 
-# Windows/Linux differences
+# Windows/Linux differences: relocation
 
-* Loader loads DLL code to arbitrary position in address space
-  * Windows and Linux make different choices
-  * Linux shlibs are linked in position-independent mode (no explicit addresses in code)
-    * So code does not need to be modified when loaded
-  * Windows code may contain absolute addresses so needs to be "relocated"
-    * Code is patched at load time
+* Loader may load DLL code to arbitrary free position in address space
+* If code uses absolute addresses internally as e.g. in
+```
+# Call to internal DLL function on Windows
+call   523e11060 <puts>
+```
+  it will need to be patched (relocated) to match DLL load address
+* Windows and Linux make different choices here:
+  * Linux shlibs are linked in position-independent mode (no explicit addresses in code, `-fPIC` required)
+    * So code does not need to be modified when loaded (globals which contain intra-library references still needs to be updated)
+  * Windows code is actually relocated at load time
     * Loader in modern Windows uses same load address for DLL in all processes so overhead is paid only on first DLL load
-      * Wasn't always the case
-* Symbol search algorithm (+ runtime interposition, `LD_PRELOAD`)
-  * Windows and Linux take different approach to symbol resolution across libraries
-  * On Windows each symbol is bound to library at link time
-  * On Linux symbols are searched in all loaded libraries in order
-    * That allows tricks with runtime interposition e.g. `LD_PRELOAD`
-* Symbol binding
-  * On Windows symbols are located at startup
-  * On Windows function symbol resolution is deferred until function is called the first time (lazy binding)
+    * Wasn't always the case (see `/BASE` flag which was used to set "preferred load address")
+
+# Windows/Linux differences: symbol search
+
+* Process of matching symbols exported by shlibs and imported by executables or other shlibs is called "symbol resolution"
+* Windows and Linux take different approach to symbol resolution across libraries
+* On Windows each symbol is bound to library at link time so loader knows exactly in which library to look for symbol
+* On Linux symbols are searched in all loaded libraries in order and the first library which has it takes precedence over others
+  * This allows so called runtime interposition technique when we forcedly insert a library which intercepts some symbol
+  * This is often used by diagnostic or hardening tools e.g. memory debuggers like [efence](https://linux.die.net/man/3/efence)
+  * Usually this is done via `LD_PRELOAD`:
+```
+$ cat prog.c
+int main() { printf("%d\n", 1); }
+$ cat lib.c
+int printf(const char *fmt, ...) { puts(fmt); }
+$ LD_PRELOAD=./lib.so ./prog
+%d
+```
+
+# Windows/Linux differences: symbol binding
+
+* On Windows all symbols are resolved at startup
+* On Windows function symbol resolution is deferred until function is called the first time (lazy binding)
+* Speeds up startup time at the cost of one extra jump
+
+# Windows/Linux differences: other
+
 * Symbol visibility
   * On Windows symbols are not exported from DLL by default
-  * on Linux it's vice verse
+  * on Linux it's vice verse (was probly a bad decision)
 * Import libs
   * On Linux we link against shlib directly
   * On Windows we link against a small static library (called import library) which is produced together with DLL
@@ -198,6 +233,8 @@ $ gcc myprog.c libxyz.so.tramp.S libxyz.so.init.c -ldl
 
 * `LoadLibrary`/`dlopen`
 * DLL hell, sonames, symver
+* Conclusions
+* Recommended readings
 
 # Links
 
