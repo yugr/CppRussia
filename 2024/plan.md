@@ -19,7 +19,7 @@
     * e.g. plugins or load library implementation specifically for processor
 * But also has disadvantages
   * additional startup overheads to load library and locate symbols
-  * DLL boundary is blocker for optimization
+  * DLL boundary blocks optimizations
 
 # How DLLs work, in general
 
@@ -40,13 +40,20 @@ jmp  *foo@GOTPCREL(%rip)
 
 # Windows specifics
 
-* .idata/Import Directory Table on Windows
-* Symbols in import table are bound to particular DLL
+* Windows executables and DLLs follow PE binary format
+* Executable consists of a header and several sections
+  * Section is a piece of information with similar properties
+  * E.g. code section, rodata section, etc.
+* Imported symbols are stored in special `.idata` section which contains so called Import Directory Table
+* Each entry in the table holds info about single imported DLL and symbols (functions or globals) which come from it
+  * Symbols in import table are bound to particular DLL!
 
 # Linux specifics
 
-* .dynamic on Linux
-* Symbols searched globally across all loaded DLLs
+* Somewhat similar to Windows case
+  * `.dynamic` and `.dynsym` sections on Linux instead of `.idata`
+* But most importantly imported symbols are not bound to particular DLL at binary level
+  * Symbols searched globally across all loaded DLLs at runtime (so called symbol resolution)
 
 # Windows/Linux differences
 
