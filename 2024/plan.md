@@ -19,17 +19,34 @@
 # Pros/cons of DLLs
 
 * Dynamic linking has several benefits:
-  * faster/easier library updates (important for security fixes)
-    * Dependents do not need to be updated on library update
-  * ASLR support
-    * Randomized library position in address space complicates hacker attacks
-  * support for more complex usage scenarios
-    * e.g. plugins or load library implementation specifically for processor
+  * faster/easier library updates (important for fast bugfixes)
+    * dependents do not need to be updated on library update
   * memory/disk savings (library code can be shared by multiple executables)
+  * support for more complex usage scenarios (more on this below)
 * But also has disadvantages
   * additional startup overheads (to load library and locate symbols)
   * DLL is a boundary for optimizations
   * more fragile in use (DLL hell)
+
+# Link-time and run-time linking of DLLs
+
+* In most cases DLLs are linked into application the same way as static libs:
+  by specifying library name to the linker:
+```
+# Linux
+gcc prog.c -lgmp
+
+# Windows
+link.exe prog.obj libfoo.lib
+```
+* In that case DLL will be loaded at program startup
+* But DLLs can also be loaded dynamically at runtime via special APIs
+  * `LoadLibrary` on Windows, `dlopen` on Linux/macOS
+  * addresses of DLL functions can then be obtained at runtime via `GetProcAddress`/`dlsym` APIs and used
+* Runtime loading enables more complex usage scenarios:
+  * load DLL variant which is optimized for particular processor (e.g. particular AVX support)
+  * load user-provided plugins to extend program functionality
+  * load DLL only when it is needed (delay loading, more on this below)
 
 # How DLLs work, in general
 
@@ -292,22 +309,11 @@ $ diff api.txt abi.txt | head
 # TODO
 
 * Performance numbers
-* Link-time loading vs run-time loading (`LoadLibrary`/`dlopen`)
 * DLL hell, sonames, symver
 * Conclusions
 * Recommended readings
 
 # Links
-
-https://www.codeproject.com/Articles/1253835/The-Structure-of-import-Library-File-lib
-https://www.codeproject.com/Articles/146652/Creating-Import-Library-from-a-DLL-with-Header-Fil
-
-What happens without dllimport?
-  * https://repnz.github.io/posts/reversing-windows-libraries/#using-the-import-table-to-load-dlls
-  * https://learn.microsoft.com/en-us/archive/msdn-magazine/2002/february/inside-windows-win32-portable-executable-file-format-in-detail
-  * https://devblogs.microsoft.com/oldnewthing/20060726-00/?p=30363
-  * https://devblogs.microsoft.com/oldnewthing/20060721-06/?p=30433
-  * https://devblogs.microsoft.com/oldnewthing/20060724-00/?p=30403
 
 General overview:
   * https://blog.aaronballman.com/2011/10/how-dll-imports-work/
@@ -316,11 +322,20 @@ General overview:
   * [CppCon 2017: James McNellis “Everything You Ever Wanted to Know about DLLs”](https://www.youtube.com/watch?v=JPQWQfDhICA)
   * https://dennisbabkin.com/blog/?t=intricacies-of-microsoft-compilers-the-case-of-the-curious-__imp_
 
+What happens without dllimport?
+  * https://repnz.github.io/posts/reversing-windows-libraries/#using-the-import-table-to-load-dlls
+  * https://learn.microsoft.com/en-us/archive/msdn-magazine/2002/february/inside-windows-win32-portable-executable-file-format-in-detail
+  * https://devblogs.microsoft.com/oldnewthing/20060726-00/?p=30363
+  * https://devblogs.microsoft.com/oldnewthing/20060721-06/?p=30433
+  * https://devblogs.microsoft.com/oldnewthing/20060724-00/?p=30403
+
 PE anatomy:
   * https://learn.microsoft.com/en-us/archive/msdn-magazine/2002/march/inside-windows-an-in-depth-look-into-the-win32-portable-executable-file-format-part-2
   * https://learn.microsoft.com/en-us/archive/msdn-magazine/2002/february/inside-windows-win32-portable-executable-file-format-in-detail
   * https://bytepointer.com/resources/pe_luevelsmeyer.htm
   * https://0xrick.github.io/win-internals/pe6/
+  * https://www.codeproject.com/Articles/1253835/The-Structure-of-import-Library-File-lib
+  * IAT: https://devblogs.microsoft.com/oldnewthing/20221006-07/?p=107257
 
 Load-time relocation/ASLR:
   * https://stackoverflow.com/questions/33443618/relocation-of-pe-dlls-load-time-or-like-elf
@@ -328,15 +343,12 @@ Load-time relocation/ASLR:
   * https://devblogs.microsoft.com/oldnewthing/20160413-00/?p=93301
   * https://www.mandiant.com/resources/blog/six-facts-about-address-space-layout-randomization-on-windows
 
-DLL hinting:
-  * https://devblogs.microsoft.com/oldnewthing/20100317-00/?p=14573
-
-DLL binding:
-  * https://devblogs.microsoft.com/oldnewthing/20231129-00/?p=109077
-  * https://devblogs.microsoft.com/oldnewthing/20231129-00/?p=109077
-
-IAT:
-  * https://devblogs.microsoft.com/oldnewthing/20221006-07/?p=107257
+Windows DLL optimizations:
+  * hinting:
+    * https://devblogs.microsoft.com/oldnewthing/20100317-00/?p=14573
+  * binding:
+    * https://devblogs.microsoft.com/oldnewthing/20231129-00/?p=109077
+    * https://devblogs.microsoft.com/oldnewthing/20231129-00/?p=109077
 
 Diffs:
   * no lazy binding in Windows DLLs (=> no runtime interposition)
@@ -347,14 +359,13 @@ Diffs:
   * different default visibility => many more indirect GOT references on Linux by default
   * on Windows symbol is bound to particular library at link time
 
-Similiarities:
-  * runtime linking via loader
-  * visibility concept
-  * .dynamic =~ .idata
-  * GOT =~ IAT
+CMake support for DLLs:
+  * https://www.youtube.com/watch?v=m0DwB4OvDXk
 
 Spurious trampoline:
   * https://stackoverflow.com/questions/77741370/spurious-trampoline-when-calling-function-from-dll
 
-mac OS:
+macOS:
   * https://developer.apple.com/library/archive/documentation/DeveloperTools/Conceptual/DynamicLibraries/000-Introduction/Introduction.html
+
+https://www.codeproject.com/Articles/146652/Creating-Import-Library-from-a-DLL-with-Header-Fil
