@@ -309,6 +309,7 @@ $ diff api.txt abi.txt | head
 # TODO
 
 * Performance numbers
+* DLL interface
 * DLL hell, sonames, symver
 * Conclusions
 * Recommended readings
@@ -348,7 +349,7 @@ Windows DLL optimizations:
     * https://devblogs.microsoft.com/oldnewthing/20100317-00/?p=14573
   * binding:
     * https://devblogs.microsoft.com/oldnewthing/20231129-00/?p=109077
-    * https://devblogs.microsoft.com/oldnewthing/20231129-00/?p=109077
+    * https://devblogs.microsoft.com/oldnewthing/20100318-00/?p=14563
 
 Diffs:
   * no lazy binding in Windows DLLs (=> no runtime interposition)
@@ -367,5 +368,21 @@ Spurious trampoline:
 
 macOS:
   * https://developer.apple.com/library/archive/documentation/DeveloperTools/Conceptual/DynamicLibraries/000-Introduction/Introduction.html
+
+Performance:
+  * -fno-semantic-interposition:
+    * https://developers.redhat.com/blog/2020/06/25/red-hat-enterprise-linux-8-2-brings-faster-python-3-8-run-speeds
+    * https://www.facebook.com/dan.colascione/posts/10107358290728348
+    * https://lore.kernel.org/lkml/20210501235549.vugtjeb7dmd5xell@google.com/
+  * -Bsymbolic:
+    * https://bugzilla.redhat.com/show_bug.cgi?id=1956484
+    * https://bugs.archlinux.org/task/70697
+  * Prelink:
+    * https://people.redhat.com/jakub/prelink.pdf
+  * -fno-plt:
+    * https://gcc.gnu.org/legacy-ml/gcc-patches/2015-05/msg00001.html
+    * https://github.com/rust-lang/rust/pull/54592
+    * https://cyberleninka.ru/article/n/optimizatsiya-dinamicheskoy-zagruzki-bibliotek-na-arhitekture-arm/viewer
+    * https://gcc.gnu.org/legacy-ml/gcc-patches/2015-05/msg00225.html
 
 https://www.codeproject.com/Articles/146652/Creating-Import-Library-from-a-DLL-with-Header-Fil
