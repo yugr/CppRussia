@@ -386,3 +386,6 @@ Performance:
     * https://gcc.gnu.org/legacy-ml/gcc-patches/2015-05/msg00225.html
 
 https://www.codeproject.com/Articles/146652/Creating-Import-Library-from-a-DLL-with-Header-Fil
+
+DLL memory savings:
+  * https://zvrba.net/articles/solib-memory-savings.html
