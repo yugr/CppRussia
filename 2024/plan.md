@@ -389,3 +389,7 @@ https://www.codeproject.com/Articles/146652/Creating-Import-Library-from-a-DLL-w
 
 DLL memory savings:
   * https://zvrba.net/articles/solib-memory-savings.html
+
+`LD_BIND_NOW` in distros:
+  * RHEL: https://fedoraproject.org/wiki/Security_Features_Matrix
+  * Ubuntu: https://wiki.ubuntu.com/ToolChain/CompilerFlags
