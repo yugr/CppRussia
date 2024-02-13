@@ -374,6 +374,7 @@ Performance:
     * https://developers.redhat.com/blog/2020/06/25/red-hat-enterprise-linux-8-2-brings-faster-python-3-8-run-speeds
     * https://www.facebook.com/dan.colascione/posts/10107358290728348
     * https://lore.kernel.org/lkml/20210501235549.vugtjeb7dmd5xell@google.com/
+    * https://fedoraproject.org/wiki/Changes/PythonNoSemanticInterpositionSpeedup
   * -Bsymbolic:
     * https://bugzilla.redhat.com/show_bug.cgi?id=1956484
     * https://bugs.archlinux.org/task/70697
