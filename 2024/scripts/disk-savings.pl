@@ -1,5 +1,12 @@
 #!/usr/bin/env perl
 
+# A simple script to estimate disk savings from shared libraries on current
+# system.
+#
+# Reported number should be taken with a grain of salt because
+# when library is linked statically, only some of it's symbols will end up in
+# executable. I _think_ 0.5 should be a safe factor.
+
 use strict;
 use warnings;
 
@@ -60,4 +67,4 @@ for my $lib (sort keys %counts) {
 }
 
 $total_saving /= 1024 * 1024;
-print "Total savings: $total_saving M\n";
+print "Total savings: $total_saving MB\n";
