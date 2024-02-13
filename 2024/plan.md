@@ -385,6 +385,9 @@ Performance:
     * https://github.com/rust-lang/rust/pull/54592
     * https://cyberleninka.ru/article/n/optimizatsiya-dinamicheskoy-zagruzki-bibliotek-na-arhitekture-arm/viewer
     * https://gcc.gnu.org/legacy-ml/gcc-patches/2015-05/msg00225.html
+  * disk/RAM savings:
+    * https://drewdevault.com/dynlib.html
+    * https://zvrba.net/articles/solib-memory-savings.html (https://gist.github.com/zvrba/33893e14b4536a8d55d1)
 
 https://www.codeproject.com/Articles/146652/Creating-Import-Library-from-a-DLL-with-Header-Fil
 
