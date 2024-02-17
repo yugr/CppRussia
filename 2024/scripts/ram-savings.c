@@ -65,21 +65,25 @@ void analyze_pid(int pid, int *counts, long max_pages, long pagesize, FILE *kpag
       break;
 
     // Parse entry
+    // 56129b372000-56129b3a9000 r--p 00000000 08:03 3411032    /usr/bin/vim.basic
 
     long begin, end, off, major, minor, inode;
     char perms[5] = {};
     int prefix_len;
-    // 56129b372000-56129b3a9000 r--p 00000000 08:03 3411032    /usr/bin/vim.basic
     sscanf(line, "%lx-%lx %4s %ld %ld:%ld %ld%n",
            &begin, &end, perms, &off,
            &major, &minor, &inode, &prefix_len);
 
     prefix_len += strspn(&line[prefix_len], " ");
-//    printf("%d: '%s'\n", len, &line[len]);
-    // TODO: extract soname
+    char *soname = &line[prefix_len];
+    char *soname_end = strchr(soname, '\n');
+    if (soname_end)
+      *soname_end = 0;
 
-    // TODO: r--p
-    if (strcmp("r-xp", perms) != 0 || !inode)
+    // TODO: r--p ?
+    if (strcmp("r-xp", perms) != 0
+        || !inode
+        || !strstr(soname, ".so"))
       continue;
 
     // Analyze range
@@ -140,6 +144,8 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
   }
+
+  CHECK(getuid() == 0, "need to run under root");
 
   // Get system info
 
