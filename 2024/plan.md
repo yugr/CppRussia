@@ -338,6 +338,14 @@ PE anatomy:
   * https://www.codeproject.com/Articles/1253835/The-Structure-of-import-Library-File-lib
   * IAT: https://devblogs.microsoft.com/oldnewthing/20221006-07/?p=107257
 
+Dynamic loader:
+  * Windows:
+    * https://github.com/polycone/pe-loader
+    * https://github.com/andrew-boyarshin/LoaderWatch
+    * https://fourcore.io/blogs/how-a-windows-process-is-created-part-2
+  * Linux:
+    * https://johntortugo.wordpress.com/2012/08/27/understanding-linux-elf-rtld-internals/
+
 Load-time relocation/ASLR:
   * https://stackoverflow.com/questions/33443618/relocation-of-pe-dlls-load-time-or-like-elf
   * https://devblogs.microsoft.com/oldnewthing/20170120-00/?p=95225
