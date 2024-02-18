@@ -1,3 +1,6 @@
+// This program measures RAM savings of shared libraries
+// currently used by system. It needs to be run under root.
+//
 // Based on https://gist.github.com/zvrba/33893e14b4536a8d55d1
 //
 // See https://www.kernel.org/doc/Documentation/vm/pagemap.txt
@@ -23,7 +26,7 @@ int v = 1;
   } while (0)
 
 int *collect_pids(int *n) {
-  int pid_max = 0; // TODO
+  int pid_max = 0;
   int *pids = 0;
   int pid_count = 0;
 
@@ -35,7 +38,7 @@ int *collect_pids(int *n) {
     if (!pid)
       continue;
     if (++pid_count > pid_max) {
-      pid_max += 100;
+      pid_max += 500;
       pids = realloc(pids, pid_max * sizeof(int));
     }
     pids[pid_count - 1] = pid;
@@ -47,7 +50,8 @@ int *collect_pids(int *n) {
   return pids;
 }
 
-void analyze_pid(int pid, int *counts, long max_pages, long pagesize, FILE *kpagecount) {
+void analyze_pid(int pid, int *counts, long max_pages, long pagesize,
+                 FILE *kpagecount, int data) {
   char maps_name[PATH_MAX];
   snprintf(maps_name, sizeof(maps_name), "/proc/%d/maps", pid);
   FILE *maps = fopen(maps_name, "rb");
@@ -80,10 +84,12 @@ void analyze_pid(int pid, int *counts, long max_pages, long pagesize, FILE *kpag
     if (soname_end)
       *soname_end = 0;
 
-    // TODO: r--p ?
-    if (strcmp("r-xp", perms) != 0
-        || !inode
-        || !strstr(soname, ".so"))
+    int is_shareable = strcmp("r-xp", perms) == 0;
+    if (data) {
+      is_shareable |= strcmp("r--p", perms) == 0;
+    }
+
+    if (!is_shareable || !inode || !strstr(soname, ".so"))
       continue;
 
     // Analyze range
@@ -128,10 +134,14 @@ int main(int argc, char *argv[]) {
   // Parse options
 
   int pid = -1;
+  int data = 0;
 
   int opt;
-  while ((opt = getopt(argc, argv, "hvp:")) != -1) {
+  while ((opt = getopt(argc, argv, "hdp:v")) != -1) {
     switch (opt) {
+      case 'd':
+        data = 1;
+        break;
       case 'p':
         pid = atoi(optarg);
         break;
@@ -140,7 +150,7 @@ int main(int argc, char *argv[]) {
         break;
       case 'h':
       default:
-        fprintf(stderr, "Usage: %s [-p pid] [-v]\n", argv[0]);
+        fprintf(stderr, "Usage: %s [-h] [-d] [-p pid] [-v]\n", argv[0]);
         exit(EXIT_FAILURE);
     }
   }
@@ -185,7 +195,7 @@ int main(int argc, char *argv[]) {
   CHECK(kpagecount, "failed to open /proc/kpagecount");
 
   for (int i = 0; i < pid_count; ++i) {
-    analyze_pid(pids[i], counts, max_pages, pagesize, kpagecount);
+    analyze_pid(pids[i], counts, max_pages, pagesize, kpagecount, data);
   }
 
   fclose(kpagecount);
