@@ -405,3 +405,11 @@ DLL memory savings:
 `LD_BIND_NOW` in distros:
   * RHEL: https://fedoraproject.org/wiki/Security_Features_Matrix
   * Ubuntu: https://wiki.ubuntu.com/ToolChain/CompilerFlags
+
+DLL hell:
+  * https://www.quora.com/Is-DLL-Hell-still-a-problem-in-Windows-10
+  * https://www.quora.com/How-does-Linux-solve-the-DLL-Hell-problem
+  * SxS:
+    * https://www.gunsmoker.ru/2011/02/dll-dll-hell-dll-side-by-side.html
+  * portable formats:
+    * https://habr.com/ru/articles/673488/
