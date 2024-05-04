@@ -413,3 +413,6 @@ DLL hell:
     * https://www.gunsmoker.ru/2011/02/dll-dll-hell-dll-side-by-side.html
   * portable formats:
     * https://habr.com/ru/articles/673488/
+
+http://www.mindfruit.co.uk/posts/2012/06/relocations/
+https://news.ycombinator.com/item?id=9378861
