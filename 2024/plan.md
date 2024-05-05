@@ -322,6 +322,7 @@ General overview:
   * [Dynamically Loaded Libraries Outside the Standard - Zhihao Yuan - CppCon 2021](https://www.youtube.com/watch?v=-dxCaM4GOqs)
   * [CppCon 2017: James McNellis “Everything You Ever Wanted to Know about DLLs”](https://www.youtube.com/watch?v=JPQWQfDhICA)
   * https://dennisbabkin.com/blog/?t=intricacies-of-microsoft-compilers-the-case-of-the-curious-__imp_
+  * Architectural Support for Dynamic LinkingЖ https://compas.cs.stonybrook.edu/~mferdman/downloads.php/ASPLOS15_Architectural_Support_for_Dynamic_Linking.pdf
 
 What happens without dllimport?
   * https://repnz.github.io/posts/reversing-windows-libraries/#using-the-import-table-to-load-dlls
@@ -378,6 +379,7 @@ macOS:
   * https://developer.apple.com/library/archive/documentation/DeveloperTools/Conceptual/DynamicLibraries/000-Introduction/Introduction.html
 
 Performance:
+  * Guided Linking: https://dl.acm.org/doi/pdf/10.1145/3428213
   * -fno-semantic-interposition:
     * https://developers.redhat.com/blog/2020/06/25/red-hat-enterprise-linux-8-2-brings-faster-python-3-8-run-speeds
     * https://www.facebook.com/dan.colascione/posts/10107358290728348
