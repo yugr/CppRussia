@@ -413,6 +413,7 @@ DLL hell:
   * https://www.quora.com/How-does-Linux-solve-the-DLL-Hell-problem
   * SxS:
     * https://www.gunsmoker.ru/2011/02/dll-dll-hell-dll-side-by-side.html
+    * https://www.kitware.com/deploying-on-windows-with-dll-manifest-issues/
   * portable formats:
     * https://habr.com/ru/articles/673488/
 
